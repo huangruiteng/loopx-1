@@ -30,11 +30,13 @@ function ToolContent({text, complete, zh}: {text: string; complete: boolean; zh:
   return <pre>{text}</pre>;
 }
 
-export function AttachedConversationRecord({record, agent, zh, load}: {
+export function AttachedConversationRecord({record, agent, zh, load, live = false}: {
   record: ConversationRecord; agent: string; zh: boolean;
   load: (record: ConversationRecord, offset: number) => Promise<ContentPage>;
+  live?: boolean;
 }) {
-  const [text, setText] = useState(record.text);
+  const [storedText, setText] = useState(record.text);
+  const text = live ? record.text : storedText;
   const [more, setMore] = useState(record.truncated);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -48,7 +50,8 @@ export function AttachedConversationRecord({record, agent, zh, load}: {
     function_call: "Tool call", custom_tool_call: "Tool call",
     function_call_output: "Tool result", custom_tool_call_output: "Tool result",
   };
-  const title = record.role === "user" ? (zh ? "你" : "You") : record.role === "assistant" ? agent :
+  const title = live && record.role === "tool" ? `${zh ? "正在执行" : "In progress"} · ${record.label}` :
+    record.role === "user" ? (zh ? "你" : "You") : record.role === "assistant" ? agent :
     `${labels[record.kind] ?? (zh ? "记录暂不可读" : "Record unavailable")}${record.label && record.label !== record.kind ? ` · ${record.label}` : ""}`;
   async function continueReading() {
     if (loading) return;

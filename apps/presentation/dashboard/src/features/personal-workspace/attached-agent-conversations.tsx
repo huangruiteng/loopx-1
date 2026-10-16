@@ -6,6 +6,9 @@ type Binding = {agent_id: string; thread_id: string; binding_ref: string};
 type Message = ConversationRecord;
 type Snapshot = {messages?: Message[]; before?: number | null; after?: number; has_more?: boolean; reset?: boolean; source_ref?: string; history_size?: number; revision: string; unchanged?: boolean; connected?: boolean; can_reply?: boolean; activity: {state: string}};
 type Submission = {operation_id: string; text: string; status?: string};
+type LiveRecords = {identity: string; records: Message[]};
+type LiveObservation = {kind: "records"; revision: number; records: Message[]} |
+  {kind: "unavailable"; retry: boolean};
 
 class ConversationRequestError extends Error {
   constructor(message: string, readonly unsubmittedOperation?: string) {super(message);}
@@ -70,6 +73,9 @@ export function AttachedAgentConversations({goalId, zh, targetAgentId}: {
   const [refresh, setRefresh] = useState(0);
   const [readingHistory, setReadingHistory] = useState(false);
   const [unread, setUnread] = useState(false);
+  const [liveView, setLiveView] = useState<LiveRecords>({identity: "", records: []});
+  const [liveUnavailable, setLiveUnavailable] = useState(false);
+  const latestLive = useRef<LiveRecords>({identity: "", records: []});
   const following = useRef(true);
   const after = useRef<number | null>(null);
   const historyEpoch = useRef(0);
@@ -81,7 +87,37 @@ export function AttachedAgentConversations({goalId, zh, targetAgentId}: {
   const binding = agents.find(agent => agent.agent_id === selected);
   const awaitingReceipt = Boolean(submission?.status && submission.status !== "delivered");
   const cacheKey = binding ? `loopx-attached-input:${goalId}:${binding.binding_ref}` : "";
+  const liveEnabled = Boolean(snapshot?.connected && snapshot.activity.state !== "idle");
+  const liveIdentity = `${goalId}:${targetAgentId ?? ""}:${binding?.agent_id ?? ""}:${binding?.binding_ref ?? ""}`;
+  const liveRecords = liveView.identity === liveIdentity ? liveView.records : [];
   const query = binding ? new URLSearchParams({goal_id: goalId, agent_id: binding.agent_id, binding_ref: binding.binding_ref}) : null;
+
+  useEffect(() => {
+    let active = true;
+    latestLive.current = {identity: "", records: []}; setLiveView(latestLive.current); setLiveUnavailable(false);
+    if (!binding || !liveEnabled) return;
+    const source = new EventSource(`/api/chat/codex-attached/live?${query}`);
+    const unavailable = () => {latestLive.current = {identity: "", records: []}; setLiveView(latestLive.current); setLiveUnavailable(true);};
+    source.addEventListener("observation", event => {
+      if (!active) return;
+      try {
+        const value = JSON.parse((event as MessageEvent<string>).data) as LiveObservation;
+        if (value.kind === "records" && Array.isArray(value.records)) {
+          latestLive.current = {identity: liveIdentity, records: value.records}; setLiveUnavailable(false);
+          if (following.current) {
+            const follow = !transcript.current || transcript.current.scrollHeight - transcript.current.scrollTop - transcript.current.clientHeight < 64;
+            setLiveView(latestLive.current);
+            if (follow) requestAnimationFrame(() => {if (active && following.current) transcript.current?.scrollTo({top: transcript.current.scrollHeight});});
+          } else setUnread(true);
+        } else if (value.kind === "unavailable") {
+          unavailable();
+          if (!value.retry) source.close();
+        } else {source.close(); unavailable();}
+      } catch {source.close(); unavailable();}
+    });
+    source.onerror = () => {if (active) unavailable();};
+    return () => {active = false; source.close();};
+  }, [liveIdentity, liveEnabled]);
 
   useEffect(() => {
     let active = true;
@@ -193,6 +229,7 @@ export function AttachedAgentConversations({goalId, zh, targetAgentId}: {
   function latest() {
     historyEpoch.current++; after.current = null; history.current = null; revision.current = "";
     following.current = true; setReadingHistory(false); setUnread(false); setMessages([]); setBefore(null);
+    setLiveView(latestLive.current);
   }
   async function loadContent(record: Message, offset: number): Promise<ContentPage> {
     const params = new URLSearchParams(query!);
@@ -274,8 +311,13 @@ export function AttachedAgentConversations({goalId, zh, targetAgentId}: {
         {readingHistory ? <div className="attached-history-navigation"><span>{zh ? "正在回看历史" : "Reading history"}{unread ? (zh ? " · 有新活动" : " · new activity") : ""}</span><button type="button" disabled={loadingOlder} onClick={() => void older(true)}>{zh ? "较新记录" : "Newer records"}</button><button type="button" onClick={latest}>{zh ? "回到最新" : "Back to latest"}</button></div> : null}
         <div className="attached-conversation-messages" ref={transcript} onWheel={event => {if (event.deltaY < 0) pauseHistory();}} onTouchMove={pauseHistory} onClick={pauseHistory} onKeyDown={event => {if (["ArrowUp", "PageUp", "Home"].includes(event.key)) pauseHistory();}} aria-label={zh ? "原会话消息" : "Original conversation messages"}>
           {messages.map(message => <AttachedConversationRecord key={`${history.current?.source}:${message.id}:${message.content_ref ?? ""}`} record={message} agent={binding.agent_id} zh={zh} load={loadContent}/>)}
-          {!messages.length && snapshot ? <p>{zh ? "当前有界历史窗口内没有可显示的消息，可读取更早记录。" : "No displayable messages in this bounded window; read earlier records."}</p> : null}
+          {liveRecords.length ? <div aria-label={zh ? "原宿主实时记录" : "Original host live records"}>
+            <p>{zh ? "正在发生 · 原宿主实时观察" : "In progress · observed from the original host"}</p>
+            {liveRecords.map(record => <AttachedConversationRecord key={record.id} record={record} agent={binding.agent_id} zh={zh} load={loadContent} live/>)}
+          </div> : null}
+          {!messages.length && !liveRecords.length && snapshot ? <p>{zh ? "当前有界历史窗口内没有可显示的消息，可读取更早记录。" : "No displayable messages in this bounded window; read earlier records."}</p> : null}
         </div>
+        {liveUnavailable ? <p role="status">{zh ? "实时观察暂不可用，已保存的消息与工具记录仍会自动更新。" : "Live observation is unavailable; saved messages and tools still update automatically."}</p> : null}
         {submission?.status ? <p role="status">{submission.status === "delivered" ? (zh ? "已由原 App 接纳；等待 Agent 结果。" : "Accepted by the original App; awaiting the Agent result.") : (zh ? "投递尚未确认，请先在原 App 核对，不会自动重发。" : "Delivery unconfirmed; check the original App. No automatic resend.")} {submission.status === "pending" ? <button type="button" disabled={sending} onClick={() => void readReceipt()}>{zh ? "重读投递回执" : "Recheck delivery receipt"}</button> : null}{awaitingReceipt ? <button type="button" disabled={sending} onClick={nextReply}>{zh ? "已核对，写下一条" : "Checked; write another"}</button> : null}</p> : null}
         {!awaitingReceipt ? <form onSubmit={event => {event.preventDefault(); void send();}}><label>{zh ? `回复 ${binding.agent_id}` : `Reply to ${binding.agent_id}`}<textarea value={draft} maxLength={24000} disabled={sending} onChange={event => editDraft(event.target.value)}/></label><button type="submit" disabled={sending || Boolean(error || recoveryError) || !snapshot?.can_reply || !draft.trim()}>{sending ? (zh ? "正在交给原 App…" : "Sending to original App…") : (zh ? "发送到原会话" : "Send to original conversation")}</button></form> : null}
       </> : null}
