@@ -14,6 +14,7 @@
 <meta property="og:description" content="从 Borden、Grid 与 LHTB 的 24 小时真实轨迹，解释迟到的反馈、复盘点崩溃、原地微调与过早关闭四类故障为什么发生、各自归属于产品还是实验脚本，以及哪些修复已验证、哪些仍是假设。">
 <meta property="og:url" content="https://loopx-project.github.io/loopx/blog/zh/edgebench-long-horizon-repairs/">
 <link rel="stylesheet" href="../../images/edgebench-feedback-and-memory/article.css">
+<link rel="stylesheet" href="../../images/edgebench-long-horizon-repairs/evidence.css">
 </head>
 <body><main id="main"><div class="language"><a href="../">← LoopX 博客</a><a href="../../../blog/edgebench-long-horizon-repairs/" lang="en">English</a></div>
 
@@ -32,33 +33,50 @@
 <table><thead><tr><th>任务</th><th>评分方向</th><th>对照</th><th>预算</th><th>状态</th></tr></thead><tbody>
 <tr><td>EdgeBench Borden 源反演</td><td>越高越好</td><td>LoopX heartbeat（planned 入口）对原生 Codex</td><td>24 小时，原生反馈，提交冷却 1 小时</td><td>两对；第一对 12.4 小时中断，第二对 3 小时暂停</td></tr>
 <tr><td>EdgeBench Grid 图灵机器人</td><td>越低越好</td><td>同上</td><td>24 小时，同上</td><td>11.7 小时暂停</td></tr>
-<tr><td>EdgeBench codec / rust / jagua</td><td>按题</td><td>LoopX 修复版、原生、原生 Goal</td><td>90 分钟本地，冷却 15 分钟</td><td>13 条完成</td></tr>
+<tr><td>EdgeBench Borden / codec / rust / jagua</td><td>本组均越高越好</td><td>LoopX 组合修复版、原生 official、native-goal</td><td>90 分钟本地，冷却 15 分钟</td><td>13 条有评分：11 条正常终态、2 条运行器失败；另有 2 次无评分启动失败</td></tr>
 <tr><td>LHTB 四题（covshift 等）</td><td>隐藏集 reward 0–1</td><td>LoopX heartbeat 单臂，与历史五臂研究比较</td><td>90 分钟</td><td>四题试点完成，covshift 带验收门重跑完成</td></tr>
 </tbody></table>
-<p>EdgeBench 使用 <code>gpt-6.1-sol / xhigh</code>，两臂同一模型、同一镜像、同一评分器；LHTB 使用 <code>gpt-5.6-sol / max</code>。“原生反馈”指 Agent 可以主动提交并拿到公开评分，冷却时间内不能再提交。24 小时组的 LoopX 臂启用了检查点捕获，这一点在第 7 节会成为一个重要的混杂因素。</p>
+<p>EdgeBench 使用 <code>gpt-6.1-sol / xhigh</code>，两臂同一模型、同一镜像、同一评分器；LHTB 使用 <code>gpt-5.6-sol / max</code>。“原生反馈”指 Agent 可以主动提交并拿到公开评分，冷却时间内不能再提交。原 Borden 与 Grid 第二轮的 LoopX 臂启用了检查点捕获；Borden 第二对和本地组合修复版关闭了检查点，但显式开启了 TurnEnvelope。这些处理不能混为一个默认配置，第 7 节会具体区分。</p>
 <p>这些运行有不少没有跑完。原因有两类：我们自己的实验控制脚本出了故障（容器计数守卫被另一组的评分容器触发；控制进程在读取一个正在退出的容器时崩溃），以及本文写作时我们主动暂停了全部运行，先修复再重跑。中断的运行仍然是证据——曲线在中断前已经说明了问题——但不能当作终态成绩。</p>
 <aside><strong>本文的证据边界</strong><p>每个配置只跑了一到两次。曲线描述“发生了什么”；根因来自唤醒回执、CLI 调用记录与会话轨迹的逐条核对；修复的验证来自真实 CLI 与 TypeScript owner 的测试，不来自重跑。文中没有任何一个数字可以被读成“修复后提升了 X%”——重跑还没有开始。</p></aside>
 </section>
 
 <section id="curves"><h2>2. 分数曲线说明了什么</h2>
-<figure><a href="../../images/edgebench-long-horizon-repairs/score-time.svg"><img src="../../images/edgebench-long-horizon-repairs/score-time.svg" alt="两张分数–时间图。Borden：原生 Codex 第 13.6 分钟首次提交，第 194 分钟到 109；LoopX 第 48 分钟首次提交，12 次提交后在第 725 分钟到 85.6。Grid：LoopX 第 85 分钟到 2075 后 9.5 小时几乎不动，终点 2039；原生从 2260 一路降到 1791。" loading="lazy"></a><figcaption>Borden 第一对（左）与 Grid 第二轮（右）。每个点是一次被评分器接受的提交。两张图里 LoopX 的首次提交都更晚；Grid 上 LoopX 一度领先，之后再也没有换过方法。</figcaption></figure>
+<figure><a href="../../images/edgebench-long-horizon-repairs/score-time.svg"><img src="../../images/edgebench-long-horizon-repairs/score-time.svg" alt="两张分数–时间图。Borden：原生 Codex 第 13.6 分钟首次提交，第 194 分钟到 109；LoopX 第 48 分钟首次提交，12 次提交后在第 725 分钟到 85.6。Grid：LoopX 第 85 分钟到 2075 后 9.5 小时几乎不动，终点 2039；原生从 2260 一路降到 1791。" loading="lazy"></a><figcaption>Borden 第一对（左）与 Grid 第二轮（右）。点表示各次提交的原生分数，不是历史最佳分。Borden 上 LoopX 首次提交更晚；Grid 上它约第 12 分钟提交占位解，早于原生的约第 21 分钟，但此后长期停留在同一路线。提交时刻不等于评分反馈返回时刻。</figcaption></figure>
 <p>三个现象在两道题上都出现了，而且互相独立。</p>
 <p><strong>第一次外部反馈来得晚。</strong>Borden 上原生 Codex 在第 13.6 分钟拿到第一个分数，LoopX 在第 48.2 分钟；Grid 上是 21 分钟对 12 分钟，但 LoopX 的第一次提交是一个 3593 的占位解。在一个每小时只能提交一次的任务里，晚 35 分钟意味着整条曲线向右平移半个冷却周期。</p>
 <p><strong>曲线在一个局部解上变平。</strong>Grid 上 LoopX 第 85 分钟就到了 2075——当时比原生的 2182 更好——此后 9.5 小时、9 次提交，分数从 2075 走到 2039，下降不足 2%。原生同期从 2182 到 1791，中间换了三次方法：嵌入 C++ 加速器、加入动态规划修补步骤、对代价参数做扫描。Borden 上 LoopX 从第 3 次提交起几乎只改一个振幅常数，每小时提高约 2 分。</p>
 <p><strong>提交有时倒退。</strong>Borden 第一对里 LoopX 11 次有效提交出现 3 次倒退；第二对里从 68.1 掉到 41.7，拆开评分器报告看，公开部分的误差在改善，隐藏井位的误差从 0.09 升到 0.74——它在拟合公开数据。原生也倒退过（54.7 到 50.3），所以这不是 LoopX 独有的问题，但每次倒退都浪费一个冷却周期。</p>
 <p>原生在 Borden 上的 109 需要单独说明。评分器报告会返回隐藏集合的聚合指标，原生臂和本地短测里的修复版 LoopX 都通过拟合这些指标到达了 109。这是协议层面的泄漏，不是建模能力；我们把它记为任务问题，不计入任何一方的能力证据。</p>
+<h3 id="local-results">本地多题补充：更早提交，没有变成全面领先</h3>
+<p>本地报告覆盖四个任务、13 条有评分运行和 71 次原生提交。它们共用一台四核、16 GiB 主机，资源上限不是独占预留。下图按每臂原生会话首记录归零，取 <code>submitted_at</code> 定位每次提交，再绘制截至该次提交的历史最佳分；线只连接观测点，止于末次提交，没有拟合函数、置信带或补造的零分。</p>
+<figure id="local-score-curves"><div class="evidence-scroll" role="region" aria-label="本地成绩时间曲线，可横向滚动" tabindex="0"><a href="../../images/edgebench-long-horizon-repairs/local-score-time.svg"><img src="../../images/edgebench-long-horizon-repairs/local-score-time.svg" alt="本地五组历史最佳分曲线。组合 LoopX 在 Borden 达109，但包含聚合反馈反推；编解码24.714低于official的28.620；Rust三臂约26.5至26.6；Jagua两轮LoopX分别22.655和7.743，均低于official。native-goal的Rust和Jagua有评分但缺正常终态。" loading="lazy"></a></div><figcaption>本地90分钟预算，分数越高越好，各题刻度独立。蓝色圆点为组合 LoopX，橙色方点为原生 official，灰色虚线三角为 native-goal；手机上可横向滚动或打开原图。星号表示运行器失败，不表示评分无效。</figcaption></figure>
+<table><thead><tr><th>任务 / 轮次</th><th>组合 LoopX 最佳</th><th>原生 official 最佳</th><th>native-goal 最佳</th></tr></thead><tbody>
+<tr><td>Borden</td><td>109.000‡</td><td>69.579</td><td>未运行</td></tr>
+<tr><td>整数压缩编解码</td><td>24.714</td><td>28.620</td><td>12.836</td></tr>
+<tr><td>Rust 多 crate 重建</td><td>26.506</td><td>26.597</td><td>26.597*</td></tr>
+<tr><td>Jagua 第一轮</td><td>22.655</td><td>28.555</td><td>32.464*</td></tr>
+<tr><td>Jagua 第二轮</td><td>7.743</td><td>26.532</td><td>未运行</td></tr>
+</tbody></table>
+<p class="figure-note">* Rust 与 Jagua 的 native-goal 保留有效评分，但运行器截止回合超时，没有正常 <code>final_result</code>。编解码 native-goal 约38分钟自判完成；另两次编解码启动失败没有评分，未计为0分。‡ Borden 109的协议限制见上文。</p>
+<p>以这里明确的原生首记录时钟计算，组合 LoopX 首次提交约1.7–3.0分钟，official约2.8–9.7分钟。更早提交并没有保证更高的最终最佳分：编解码和两轮Jagua均落后，Rust接近。组合版对official的非缓存输入token比值约为Borden 1.06、编解码1.31、Rust 1.01、Jagua 1.67 / 1.57；这些运行也没有显示出更少的非缓存输入，不能直接换算为总费用节省。</p>
+<aside><strong>这是哪个版本的报告？</strong><p>本地组合版本为 <code>beb5d43</code> / <code>45bbf66a</code>，同时包含feedback-first、显式TurnEnvelope和实验性的guard重入放宽。重入放宽后来从#6584撤下；这些成绩不验证修订后的提案，也不能拆出每项改动的独立贡献。每题只有一到两次对照，原始分数不可跨题相加或合成总体胜率。</p></aside>
+<h3 id="fixed-borden-results">Borden第二对：保留早期领先，也保留中断</h3>
+<figure id="fixed-borden-curves"><div class="evidence-scroll" role="region" aria-label="Borden第二对成绩曲线，可横向滚动" tabindex="0"><a href="../../images/edgebench-long-horizon-repairs/fixed-borden-score-time.svg"><img src="../../images/edgebench-long-horizon-repairs/fixed-borden-score-time.svg" alt="Borden第二对每臂三次提交，组合LoopX历史最佳68.108，official历史最佳54.705；第三次提交均回落，故历史最佳线保持不变。" loading="lazy"></a></div><figcaption>候选 <code>12bb5c931</code>，checkpoint关闭、TurnEnvelope显式开启；横轴从本组控制器启动归零，与本地曲线时钟不同。每臂三次提交，最后一次分别为41.714和50.347；图中保留的是历史最佳68.108和54.705。</figcaption></figure>
+<p>这对运行的控制器在容器资源采样时崩溃，随后求解进程被停止，缺少正常终态结果。陈旧状态文件仍写着 <code>running</code>，不能据此视为持续执行；保留的最佳分也不能作为24小时完成成绩，或作为检查点恢复已经修好的证据。</p>
+<details><summary>相关公开报告与图表数据</summary><p><a href="https://github.com/loopx-project/loopx/blob/1d60e7edb2a05fe048767444f872934c3adef992/deprecate/benchmark-legacy/edgebench/feedback-first-observations-20261016.md">反馈优先观察与运行器修复报告（冻结版本）</a>提供本地成绩、失败分类、token口径和修复边界；其远端表保留更早窗口，不能覆盖本文后续的中断记录。<a href="https://github.com/loopx-project/loopx/pull/6585#issuecomment-6206747194">covshift验收门重跑记录</a>对应第6节的0.82结果，属于另一个基准。</p><p><a href="../../images/edgebench-long-horizon-repairs/score-observations.csv" download>下载本节曲线数据CSV</a>：本地71条、远端Borden第二对6条标量观测，保留单次分、历史最佳、时钟原点与收尾分类。它是绘图数据，不包含任务材料、解答、完整轨迹或隐藏评测明细，不能据此独立复现完整实验。</p></details>
 </section>
 
 <section id="feedback"><h2>3. 迟到的反馈：规划把提交排到了第三次唤醒</h2>
 <p>从会话轨迹和唤醒回执可以直接读出原因。planned 入口让 LoopX 先做一次规划，规划器的默认画像是面向开放式产品方向的：它把一个有明确评分器的有界任务拆成了三个顺序 Todo——P0 正向模型、P0 反演、P1“有了可运行的候选之后，再通过原生评测迭代”。每次执行唤醒恰好完成一个 Todo，然后花一到一分半钟做结算（完成 Todo、认领下一个、写回 vision、记录配额）。提交因此落在第三次唤醒。</p>
 <p>这不是控制面开销的问题。规划本身约 1.3 分钟，结算合计几分钟；真正的 35 分钟差距来自 Todo 的顺序。把评测反馈排在“先把模型做好”之后，在一个评分器可以立即告诉你方向的任务里，是一个错误的先验。</p>
-<p>修复是一条规划约束：<a href="https://github.com/loopx-project/loopx/pull/6584">#6584</a> 增加了显式开启的 <code>--feedback-first</code>，在原生反馈可用时要求规划把“拿到第一次被接受的评测”排在扩展的本地校准之前。本地 90 分钟的三道题上，首次被接受的提交从 24 小时组的 47.2 分钟降到 1.8–3.1 分钟。</p>
+<p>修复是一条规划约束：<a href="https://github.com/loopx-project/loopx/pull/6584">#6584</a> 增加了显式开启的 <code>--feedback-first</code>，在原生反馈可用时要求规划把“拿到第一次被接受的评测”排在扩展的本地校准之前。本地四题的组合版本首提交约1.7–3.0分钟；同组official约2.8–9.7分钟，具体时钟见第2节。原Borden长测约48分钟的观察来自不同源码、冷却和运行条件，不能写成同条件的“48分钟降到2分钟”。</p>
 <p>需要说清它的性质。<strong>这是实验运行器一侧的规划输入，不是产品能力的提升。</strong>默认关闭；它只改变工作顺序，不改变预算、提交权或任何判断规则。它能说明的是“Todo 顺序决定了首次反馈的时间”，不能说明 LoopX 的规划器变聪明了。真正的产品问题——规划契约没有能力表达“先取反馈、再决定方向”——留在第 5 节。</p>
-<p>它还带来一个副作用。约束的措辞是“先交一个最小可行候选”；Grid 的轨迹显示后续 Todo 一直围绕这个弱起点迭代。先交一个<em>有竞争力的</em>候选，和先交一个<em>最小的</em>候选，对后面十个小时的走向可能完全不同。这一点要在重跑里对照。</p>
+<p>还有一个待验证的措辞风险：先交一个<em>有竞争力的</em>候选，和先交一个<em>最小的</em>候选，可能让后续工作走向不同。原版Grid的轨迹显示了围绕弱起点长期迭代的现象，但它没有启用新增的feedback-first，不能把该现象写成这个选项的已知副作用。这一点需要在同条件重跑中检验。</p>
 </section>
 
 <section id="wakes"><h2>4. 复盘点崩溃：一个状态字没有被接受</h2>
-<p>Grid 的 4 个复盘点全部崩溃；Borden 第一对 87 次唤醒里 24 次失败，8 次是 <code>EffectRuntimeInternalError</code>，16 次是 <code>ValueError</code>。本地没有启用检查点的 90 分钟运行，一次都没有崩过。失败的直接代价只有二十几分钟的原生时间，但每次失败都打断结算，并把之后的唤醒推进“先恢复、再审查”的模式——复盘变成了恢复的副产品。</p>
+<p>Grid 的 4 个复盘点全部崩溃；Borden 第一对 87 次唤醒里 24 次失败，8 次是 <code>EffectRuntimeInternalError</code>，16 次是 <code>ValueError</code>。本地组合修复版未启用检查点交接，没有观察到这条复盘捕获故障链；这不抹去本地另有的两条native-goal运行器超时和两次启动失败。失败的直接代价只有二十几分钟的原生时间，但每次失败都打断结算，并把之后的唤醒推进“先恢复、再审查”的模式——复盘变成了恢复的副产品。</p>
 <figure><a href="../../images/edgebench-long-horizon-repairs/wake-chain.svg"><img src="../../images/edgebench-long-horizon-repairs/wake-chain.svg" alt="六步故障链：宿主捕获检查点；Agent 同轮选择 Todo 触发行内 guard 重读；回执状态为 upgraded；选择器只接受 committed 或 replayed 并抛出无类型错误；唤醒失败且 CLI 覆盖已保存决策；下一次唤醒沿用已结束的 socket。下方三个修复框对应第 3、5、6 步。" loading="lazy"></a><figcaption>用真实 CLI 与 TypeScript owner 复现的故障链，与 Grid 的唤醒输出逐字段一致。</figcaption></figure>
 <p>根因是一个没有被接受的状态字。宿主在复盘点捕获检查点之后，Agent 在同一轮选择 Todo；这次选择会在 CLI 内部重新读取一次 guard，回执的状态渲染为 <code>upgraded</code>——它是同一份持久回执的合法视图，表示选择已把绑定追加上去。检查点选择器只接受 <code>committed</code> 和 <code>replayed</code>，于是抛出一个没有类型的错误，宿主把它表面化为内部错误，整次唤醒结束。</p>
 <p>CLI 一侧把损害放大了。被拒绝的交接落进了外层 guard 的兜底分支，被报告为 <code>quota_unexpected_collection_error</code>——“取数失败”——并覆盖了已经保存的决策文件。下一次唤醒恢复的原生会话还记得上一轮的交接 socket，而那个 socket 随上一次唤醒一起删除了，于是先是配额校验失败，再是捕获目录的 <code>ValueError</code>。两道题的失败唤醒都是这一条链。</p>
@@ -92,7 +110,7 @@
 
 <section id="confounds"><h2>7. 哪些数字不能用</h2>
 <p>写到这里，有一个发现迫使我们重新给前面的证据定性。</p>
-<p>LoopX 有一个默认关闭的 TurnEnvelope：把几十 KB 的配额决策压缩成约 8 KB 的行内视图，其余内容写到文件按引用读取。它默认关闭，因为效果从未被验证。但检查点交接的实现会在传了捕获目录时自动给 guard 命令加上 <code>--turn-envelope</code>。<strong>两次 24 小时运行都开了检查点，所以它们都在 envelope 打开的状态下跑的；</strong>它们测的不是默认的 LoopX，而是“envelope + 检查点”这个未验证的组合。本地 90 分钟那批没开检查点，envelope 是关的，一次唤醒都没有崩过。</p>
+<p>LoopX 有一个默认关闭的 TurnEnvelope：把几十 KB 的配额决策压缩成约 8 KB 的行内视图，其余内容写到文件按引用读取。检查点交接的实现会在传了捕获目录时自动给 guard 命令加上 <code>--turn-envelope</code>。<strong>原Borden与Grid第二轮因此实际启用了envelope；本地组合修复版和远端Borden第二对虽然关闭checkpoint，却显式开启了envelope。</strong>本地回执明确为 <code>turn_envelope=true</code>、<code>turn_envelope_source=explicit</code>。它们都不是干净的envelope-off对照；没有观察到捕获故障链不能证明关闭envelope改善了稳定性。</p>
 <p>这反过来让 Grid 成了 envelope 的第一份真实长程测量，结论不乐观：Agent 读了约 345 次完整的捕获文件，每个 37–57 KB——行内变短了，字节只是换了地方，还多了一次文件读取和一个每次唤醒新建的 socket，后者正是第 4 节崩溃的来源。那约四分之一的控制面开销是 envelope <em>打开</em>时测出来的。另一方面，一个未合入的实验版本放宽了 envelope 的“每次改动工作区就重新进 guard”规则，CLI 调用从 65 降到 25、配额检查从 40 降到 8——说明重入节奏才是开销的大头，不是包的大小。</p>
 <p>由此引出两条结论。第一，交接和 envelope 应当解开：配额 CLI 本来就是两个独立开关，只有 heartbeat 构建器把它们绑在一起，这是一个有边界的产品改动。第二，在把配额包和 envelope 融合之前，先做那个一直没做的验证——不开检查点、同一题 envelope 开/关各一对，测未缓存 token、包读取次数、CLI 调用数、时间占比与分数。融合的方向可以从这些证据里直接读出来：Agent 必须据以行动的决策文本留在行内，完整细节通过稳定的 CLI 读回按需获取，重入节奏写成显式规则。这是设计层面的工作，不在这一轮的代码里。</p>
 <p>还有三类数字要单列。实验控制脚本的事故——容器计数守卫被评分容器触发、控制进程读取退出中的容器时崩溃——缩短了运行，但不是 LoopX 的故障。Borden 的 109 来自评分协议泄漏，第 2 节已经说明。所有“修复后”的本地数字都带着多项变化同时发生：feedback-first、放宽的重入规则、显式 envelope；没有一个可以单独归因。</p>
@@ -101,7 +119,7 @@
 <section id="assessment"><h2>8. 怎样评价这批修复</h2>
 <p>和上一篇一样，我们按解决的缺口与证据评价，不按 PR 数量。这次多了一列：改动落在产品还是实验脚本。这一列决定了重跑的分数能说明什么——一个运行器侧的修复让曲线变好，证明的是“运行器的输入改变了结果”，不是 LoopX 的能力。</p>
 <table><thead><tr><th>缺口</th><th>归属</th><th>已证明</th><th>尚未证明</th></tr></thead><tbody>
-<tr><td>首次反馈太晚</td><td>实验脚本（规划约束，默认关闭）</td><td>Todo 顺序是主因；本地首次提交 47 分钟→2 分钟</td><td>产品规划契约本身能否表达“先取反馈”；“最小候选”措辞是否锁住弱起点</td></tr>
+<tr><td>首次反馈太晚</td><td>实验脚本（规划约束，默认关闭）</td><td>轨迹显示Todo顺序延后提交；本地组合版首提交约1.7–3.0分钟，official约2.8–9.7分钟</td><td>单因素收益；产品规划契约本身能否表达“先取反馈”；“最小候选”措辞是否锁住弱起点</td></tr>
 <tr><td>复盘点唤醒崩溃</td><td><strong>产品</strong>（检查点选择器、配额 CLI）</td><td>根因逐字段复现；7 个新测试修复前失败、修复后通过；默认路径不变</td><td>真实 Docker 试验中的读回；稳定的逐试验传输</td></tr>
 <tr><td>原地微调十小时</td><td><strong>产品</strong>（复盘规则、进展审查、规划契约）</td><td>机制定位：复盘允许保持、进展信号是自报分类、assist 静默失效</td><td>全部修复方向尚未实现；即使实现也不保证换到不同方法</td></tr>
 <tr><td>目标过早关闭</td><td>实验脚本调用产品的验收契约（默认关闭）</td><td>covshift 0.000→0.82 单次；闭合证据改为验证器形状；重确认反例已堵</td><td>强制继续之后的增益；LoopX 自身的闭合判断仍在 38 分钟触发</td></tr>
@@ -121,7 +139,7 @@
 </tbody></table>
 <p>上一篇文章结尾说，进展已从“让 Agent 多跑一会儿”走向“让更多运行时间产生有效工作”。这一轮把那句话推进了一步：<strong>有效工作还需要被问方向。</strong>原生 Codex 在同一时间里换了三次方法，因为它看到分数不动就换了；LoopX 看到了同样的分数，而它的每一条规则都允许它继续。修好这一点，才是这一轮真正的目标。</p>
 </section>
-<footer><p>研究范围：EdgeBench Borden Source Inversion、Grid Turing Robot、三道 90 分钟本地任务，以及 LHTB 四题试点。数字来自文中注明的冻结窗口与唤醒回执，口径互不替代；中断运行不构成终态成绩。公开实现入口：<a href="https://github.com/loopx-project/loopx">LoopX</a>；相关提案：<a href="https://github.com/loopx-project/loopx/pull/6584">#6584</a>、<a href="https://github.com/loopx-project/loopx/pull/6585">#6585</a>、<a href="https://github.com/loopx-project/loopx/pull/6601">#6601</a>。原始轨迹、隐藏评测材料与运行环境凭证不随本文发布。</p></footer>
+<footer><p>研究范围：EdgeBench Borden Source Inversion、Grid Turing Robot、四道90分钟本地任务，以及 LHTB 四题试点。数字来自文中注明的冻结窗口与唤醒回执，口径互不替代；中断运行不构成终态成绩。公开实现入口：<a href="https://github.com/loopx-project/loopx">LoopX</a>；相关提案：<a href="https://github.com/loopx-project/loopx/pull/6584">#6584</a>、<a href="https://github.com/loopx-project/loopx/pull/6585">#6585</a>、<a href="https://github.com/loopx-project/loopx/pull/6601">#6601</a>。原始轨迹、隐藏评测材料与运行环境凭证不随本文发布。</p></footer>
 
 <nav class="article-route" aria-label="延伸阅读"><p>本文接续 <a href="../edgebench-feedback-and-memory/">上一篇 EdgeBench 阶段性实验</a>；先建立系统全貌，可读 <a href="../semantic-software-development/">开发范式短分享</a>。 <a href="../#reading-routes">全部阅读路线</a></p></nav>
 </main></body></html>
