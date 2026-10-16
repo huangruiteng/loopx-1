@@ -109,6 +109,32 @@ async function runConversation(browser, uncertain) {
     const inputCount = async () => (await (await page.request.get(new URL('/fixture/inputs',url).href)).json()).count;
     const composer = panel.getByRole('textbox', {name:'回复 worker',exact:true});
     const send = panel.getByRole('button', {name:'发送到原会话',exact:true});
+    if (!uncertain) {
+      const live = panel.getByLabel('原宿主实时记录',{exact:true});
+      await page.request.post(new URL('/fixture/live-start',url).href);
+      await live.getByText('原宿主实时草稿',{exact:true}).waitFor();
+      assert.equal(await panel.getByText('HIDDEN REASONING MUST NOT APPEAR',{exact:true}).count(),0);
+      await live.getByText('原宿主实时草稿',{exact:true}).click();
+      await page.request.post(new URL('/fixture/live-update',url).href);
+      await panel.getByText('正在回看历史 · 有新活动',{exact:true}).waitFor();
+      assert.equal(await live.getByText('原宿主实时草稿',{exact:true}).count(),1,'History reading freezes live insertion too');
+      assert.equal(await live.getByText('原宿主实时草稿，已持续更新。',{exact:true}).count(),0);
+      await panel.getByRole('button',{name:'回到最新',exact:true}).click();
+      await live.getByText('原宿主实时草稿，已持续更新。',{exact:true}).waitFor();
+      assert.equal(await inputCount(),0,'Observation never submits native input');
+      await panel.getByRole('combobox',{name:'查看 Agent'}).selectOption('remote-worker');
+      await panel.getByText('来源：cursor。此宿主的工作记录与回复尚未接入。',{exact:true}).waitFor();
+      assert.equal(await live.count(),0,'Changing the Agent removes the old live records');
+      await page.waitForFunction(async () => (await (await fetch('/fixture/following')).json()).events.at(-1) === false);
+      await panel.getByRole('combobox',{name:'查看 Agent'}).selectOption('worker');
+      await live.getByText('原宿主实时草稿，已持续更新。',{exact:true}).waitFor();
+      assert.equal(await live.locator('article').count(),1,'A new baseline does not duplicate old live rows');
+      await page.request.post(new URL('/fixture/live-finish',url).href);
+      await page.waitForFunction(() => !document.querySelector('[aria-label="原宿主实时记录"]'));
+      await panel.locator('.attached-conversation-messages').getByText('原宿主实时草稿，已持续更新。',{exact:true}).waitFor();
+      await panel.getByText('原会话可回复',{exact:true}).waitFor();
+      assert.equal(await inputCount(),0);
+    }
     const sentOperations = [];
     page.on('request', request => {
       if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/chat/codex-attached') sentOperations.push(request.postDataJSON().operation_id);

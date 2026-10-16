@@ -50,6 +50,7 @@ with (
             patch.object(provider, "sys", SimpleNamespace(platform="darwin"))
         )
         fail_next_open = False
+        live_revision = 0
 
         def open_spy(argv, **options):
             global fail_next_open
@@ -74,11 +75,13 @@ with (
                     self._send_json({"ok": True, "count": len(launches)})
                 elif self.path == "/fixture/inputs":
                     self._send_json({"ok": True, "count": len(_inputs)})
+                elif self.path == "/fixture/following":
+                    self._send_json({"events": request.follow_events})
                 else:
                     super().do_GET()
 
             def do_POST(self):
-                global fail_next_open
+                global fail_next_open, live_revision
                 if self.path == "/fixture/work-records":
                     records = [
                         {
@@ -192,6 +195,70 @@ with (
                         "thread_id"
                     ] = "22222222-2222-4222-8222-222222222222"
                     registry.write_text(json.dumps(value))
+                    self._send_json({"ok": True})
+                elif self.path in {
+                    "/fixture/live-start",
+                    "/fixture/live-update",
+                    "/fixture/live-finish",
+                }:
+                    live_revision += 1
+                    finished = self.path == "/fixture/live-finish"
+                    text = (
+                        "原宿主实时草稿"
+                        if self.path == "/fixture/live-start"
+                        else "原宿主实时草稿，已持续更新。"
+                    )
+                    if self.path == "/fixture/live-start" or finished:
+                        with rollout.open("a") as stream:
+                            stream.write(
+                                json.dumps(
+                                    {
+                                        "type": "event_msg",
+                                        "timestamp": "2026-01-01T00:00:05Z"
+                                        if finished
+                                        else "2026-01-01T00:00:04Z",
+                                        "payload": {
+                                            "type": "task_complete"
+                                            if finished
+                                            else "task_started"
+                                        },
+                                    }
+                                )
+                                + "\n"
+                            )
+                    if finished:
+                        append_message(rollout, "assistant", text)
+                    request.publish_live(
+                        {
+                            "type": "snapshot",
+                            "revision": live_revision,
+                            "conversationState": {
+                                "id": "11111111-1111-4111-8111-111111111111",
+                                "turns": [
+                                    {
+                                        "turnId": "live-example",
+                                        "status": "completed"
+                                        if finished
+                                        else "inProgress",
+                                        "completedItemIds": [],
+                                        "items": [
+                                            {
+                                                "id": "live-answer",
+                                                "type": "agentMessage",
+                                                "phase": "commentary",
+                                                "text": text,
+                                            },
+                                            {
+                                                "id": "hidden-reasoning",
+                                                "type": "reasoning",
+                                                "content": "HIDDEN REASONING MUST NOT APPEAR",
+                                            },
+                                        ],
+                                    }
+                                ],
+                            },
+                        }
+                    )
                     self._send_json({"ok": True})
                 elif self.path == "/fixture/fail-open":
                     fail_next_open = True
