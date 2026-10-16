@@ -129,6 +129,21 @@ async function runConversation(browser, uncertain) {
       await panel.getByRole('combobox',{name:'查看 Agent'}).selectOption('worker');
       await live.getByText('原宿主实时草稿，已持续更新。',{exact:true}).waitFor();
       assert.equal(await live.locator('article').count(),1,'A new baseline does not duplicate old live rows');
+      // The other tail-return path must publish the buffered projection too.
+      // Pin the subscription events so the newer draft can only come from the
+      // buffer: a fresh follow replays the host snapshot and would decide
+      // nothing about this path.
+      await live.getByText('原宿主实时草稿，已持续更新。',{exact:true}).click();
+      await page.request.post(new URL('/fixture/live-update',url).href);
+      await panel.getByText('正在回看历史 · 有新活动',{exact:true}).waitFor();
+      assert.equal(await live.getByText('原宿主实时草稿，已持续更新 2。',{exact:true}).count(),0,'History reading freezes the newer live draft');
+      const followEvents = async () => (await (await page.request.get(new URL('/fixture/following',url).href)).json()).events.length;
+      const followsBefore = await followEvents();
+      await panel.getByRole('button',{name:'较新记录',exact:true}).click();
+      await live.getByText('原宿主实时草稿，已持续更新 2。',{exact:true}).waitFor({timeout: 3000});
+      assert.equal(await followEvents(),followsBefore,'Returning to the tail publishes the buffer instead of waiting for a new subscription');
+      assert.equal(await live.getByText('原宿主实时草稿，已持续更新。',{exact:true}).count(),0,'Returning to the tail replaces the stale draft');
+      assert.equal(await inputCount(),0,'Observation never submits native input');
       await page.request.post(new URL('/fixture/live-finish',url).href);
       await page.waitForFunction(() => !document.querySelector('[aria-label="原宿主实时记录"]'));
       await panel.locator('.attached-conversation-messages').getByText('原宿主实时草稿，已持续更新。',{exact:true}).waitFor();

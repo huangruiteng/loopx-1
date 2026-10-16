@@ -51,6 +51,7 @@ with (
         )
         fail_next_open = False
         live_revision = 0
+        live_updates = 0
 
         def open_spy(argv, **options):
             global fail_next_open
@@ -81,7 +82,7 @@ with (
                     super().do_GET()
 
             def do_POST(self):
-                global fail_next_open, live_revision
+                global fail_next_open, live_revision, live_updates
                 if self.path == "/fixture/work-records":
                     records = [
                         {
@@ -203,11 +204,19 @@ with (
                 }:
                     live_revision += 1
                     finished = self.path == "/fixture/live-finish"
-                    text = (
-                        "原宿主实时草稿"
-                        if self.path == "/fixture/live-start"
-                        else "原宿主实时草稿，已持续更新。"
-                    )
+                    if self.path == "/fixture/live-start":
+                        text = "原宿主实时草稿"
+                    elif self.path == "/fixture/live-update":
+                        # Distinct drafts let the browser regression tell a stale
+                        # frozen projection from the newer buffered one.
+                        live_updates += 1
+                        text = (
+                            "原宿主实时草稿，已持续更新。"
+                            if live_updates == 1
+                            else f"原宿主实时草稿，已持续更新 {live_updates}。"
+                        )
+                    else:
+                        text = "原宿主实时草稿，已持续更新。"
                     if self.path == "/fixture/live-start" or finished:
                         with rollout.open("a") as stream:
                             stream.write(

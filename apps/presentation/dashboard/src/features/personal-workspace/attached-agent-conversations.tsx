@@ -173,7 +173,7 @@ export function AttachedAgentConversations({goalId, zh, targetAgentId}: {
               if (combined.length > 300) setBefore(Number(combined[combined.length - 300].id));
               return combined.slice(-300);
             });
-            if (reset) {setBefore(next.before ?? null); following.current = true; setReadingHistory(false); setUnread(false);}
+            if (reset) {setBefore(next.before ?? null); resumeFollowing();}
           } else setUnread(true);
         }
         setSnapshot(previous => ({...previous, ...next})); setError("");
@@ -218,18 +218,24 @@ export function AttachedAgentConversations({goalId, zh, targetAgentId}: {
           return retained;
         });
         if (!newer) requestAnimationFrame(() => {if (transcript.current) transcript.current.scrollTop += transcript.current.scrollHeight - previousHeight;});
-        if (newer && !next.has_more) {following.current = true; setReadingHistory(false); setUnread(false);}
+        if (newer && !next.has_more) resumeFollowing();
         setError("");
       }
     } catch (failure) {if (current === generation.current) setError(String(failure));}
     finally {if (current === generation.current) setLoadingOlder(false);}
   }
 
+  // Every path that returns to the live tail publishes the buffered projection.
+  // Resuming while keeping the frozen draft would show stale work as current.
+  function resumeFollowing() {
+    following.current = true; setReadingHistory(false); setUnread(false);
+    setLiveView(latestLive.current);
+  }
   function pauseHistory() {following.current = false; setReadingHistory(true);}
   function latest() {
     historyEpoch.current++; after.current = null; history.current = null; revision.current = "";
-    following.current = true; setReadingHistory(false); setUnread(false); setMessages([]); setBefore(null);
-    setLiveView(latestLive.current);
+    setMessages([]); setBefore(null);
+    resumeFollowing();
   }
   async function loadContent(record: Message, offset: number): Promise<ContentPage> {
     const params = new URLSearchParams(query!);
